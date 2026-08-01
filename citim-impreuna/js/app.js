@@ -8,6 +8,7 @@ const STORAGE_SCORE = "ci_score";
 const STORAGE_PROGRESS = "ci_progress";
 const STORAGE_USER = "ci_user";
 const STORAGE_CYCLE = "ci_cycle";
+const STORAGE_PAGE_MISTAKES = "ci_page_mistakes";
 
 // La fiecare prag de 1000 de puncte, un verset despre Cuvânt apare pe ecran.
 // Se arată în ordine (pragul N → versetul N), iar când lista se termină se
@@ -65,6 +66,40 @@ let page = parseInt(localStorage.getItem(STORAGE_PROGRESS), 10) || 0;
 let cycle = parseInt(localStorage.getItem(STORAGE_CYCLE), 10) || 0;
 let userName = "";
 let hadMistake = false;
+
+function pageMistakeKey(cycleNumber = cycle, pageNumber = page) {
+  return `${cycleNumber}:${pageNumber}`;
+}
+
+function hasPageMistake(cycleNumber = cycle, pageNumber = page) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_PAGE_MISTAKES) || "{}");
+    return saved[pageMistakeKey(cycleNumber, pageNumber)] === true;
+  } catch {
+    return false;
+  }
+}
+
+function setPageMistake(cycleNumber = cycle, pageNumber = page) {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(STORAGE_PAGE_MISTAKES) || "{}");
+  } catch {
+    // Reset a corrupted local state instead of blocking the game.
+  }
+  saved[pageMistakeKey(cycleNumber, pageNumber)] = true;
+  localStorage.setItem(STORAGE_PAGE_MISTAKES, JSON.stringify(saved));
+}
+
+function clearPageMistake(cycleNumber = cycle, pageNumber = page) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_PAGE_MISTAKES) || "{}");
+    delete saved[pageMistakeKey(cycleNumber, pageNumber)];
+    localStorage.setItem(STORAGE_PAGE_MISTAKES, JSON.stringify(saved));
+  } catch {
+    localStorage.removeItem(STORAGE_PAGE_MISTAKES);
+  }
+}
 
 function save() {
   localStorage.setItem(STORAGE_SCORE, String(score));
@@ -151,9 +186,9 @@ function showMilestone(m) {
 
 // Publică scorul curent în tabelul agregat `scores` (un rând per utilizator),
 // ca 📊 să nu mai descarce toate evenimentele. Fire-and-forget.
-function pushScore() {
+async function pushScore() {
   if (!Tracker.enabled || !userName) return;
-  Tracker.upsertScore(userName, score);
+  return Tracker.upsertScore(userName, score);
 }
 
 function buildVerseCard(v) {
@@ -233,7 +268,7 @@ function buildSolvedVerseCard(v) {
 }
 
 function renderPage() {
-  hadMistake = false;
+  hadMistake = hasPageMistake();
 
   // Pagină deja terminată corect în acest ciclu, ultima din carte — se
   // consideră ciclul încheiat (poate fi cazul unui reload chiar înainte ca
@@ -307,6 +342,7 @@ function checkAnswers() {
       earned += POINTS_PER_VERSE;
     } else {
       hadMistake = true;
+      setPageMistake();
       flashWrong(s, true);
     }
   }
@@ -320,6 +356,7 @@ function checkAnswers() {
       updateScore(bonus);
     }
     solvedThisCycle.add(page);
+    clearPageMistake();
     saveSolvedThisCycle();
     pushScore();
     celebrate(bonus);
@@ -434,6 +471,8 @@ async function handleLogin() {
     updateUserChip();
     el.loginPassword.value = "";
     progressSynced = false;
+    Tracker.flush();
+    Tracker.flushScore();
     syncProgressFromCloud();
   } catch (err) {
     setAuthError(el.loginError, err.message);
@@ -493,6 +532,20 @@ function computeSolvedPagesForCycle(events, curCycle) {
   return solved;
 }
 
+function pageHadMistakeBeforeCompletion(events, targetPage, curCycle) {
+  const pageRefs = VERSES.slice(targetPage * PAGE_SIZE, targetPage * PAGE_SIZE + PAGE_SIZE).map((v) => v.ref);
+  const pageEvents = events
+    .filter((e) => (e.cycle == null ? 0 : e.cycle) === curCycle && REF_PAGE.get(e.verse_ref) === targetPage)
+    .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const solved = new Set();
+  for (const e of pageEvents) {
+    if (!e.correct) return true;
+    solved.add(e.verse_ref);
+    if (pageRefs.every((ref) => solved.has(ref))) return false;
+  }
+  return false;
+}
+
 // Rulează o singură dată la logare — aduce progresul de pe orice dispozitiv.
 let progressSynced = false;
 async function syncProgressFromCloud() {
@@ -516,7 +569,7 @@ async function syncProgressFromCloud() {
     el.score.textContent = score;
     // Împrospătează rândul din clasament cu scorul canonic (și auto-populează
     // tabelul `scores` la prima logare a fiecărui utilizator după migrare).
-    pushScore();
+    await pushScore();
 
     // Paginile deja terminate în ciclul curent, calculate din cloud — astfel
     // restricția „nu poți relua o pagină" ține și dacă schimbă dispozitivul.
@@ -527,6 +580,9 @@ async function syncProgressFromCloud() {
     if (resume >= 0 && resume !== page) {
       page = resume;
     }
+    hadMistake = pageHadMistakeBeforeCompletion(events, page, cycle);
+    if (hadMistake) setPageMistake();
+    else clearPageMistake();
     save();
     if (resume >= 0) renderPage();
   } catch {
@@ -537,6 +593,7 @@ async function syncProgressFromCloud() {
 
 /* --- Ecran de statistici (agregate din evenimentele Supabase) --- */
 async function renderStats() {
+  await syncProgressFromCloud();
   el.progress.textContent = "Statistici";
   el.cheer.hidden = true;
   el.checkBtn.hidden = true;
@@ -568,18 +625,24 @@ async function renderStats() {
       Tracker.fetchUserEvents(userName),
       Tracker.fetchConfig(),
     ]);
-    if (scores.length > 0) {
-      renderStatsFromScores(wrap, scores, myEvents, config.leaderboard_size);
-    } else {
+    if (scores.length === 0) {
+      wrap.innerHTML = "<p>Clasamentul nu este disponibil momentan. Încearcă din nou mai târziu.</p>";
+      return;
+    }
+    const myPoints = computePointsForUser(myEvents);
+    const currentName = normName(userName);
+    const currentRow = scores.find((entry) => normName(entry.user_name) === currentName);
+    if (currentRow) currentRow.points = myPoints;
+    else if (userName) scores.push({ user_name: userName, points: myPoints });
+    renderStatsFromScores(wrap, scores, myEvents, config.leaderboard_size);
+    /*
       // Tabelul `scores` încă nu există sau nu e populat — recurge la calculul
       // clasic din toate evenimentele, ca statisticile să funcționeze oricum.
-      const events = await Tracker.fetchAll();
       if (events.length === 0) {
         wrap.innerHTML = "<p>Nicio activitate înregistrată încă.</p>";
       } else {
-        renderStatsContent(wrap, events, config.leaderboard_size);
       }
-    }
+    */
   } catch {
     wrap.innerHTML = "<p>Statisticile au nevoie de internet. Încearcă din nou mai târziu.</p>";
   }
@@ -642,6 +705,16 @@ function normName(n) {
   return (n || '').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+
 function groupByUser(events) {
   const byUser = new Map();
   for (const e of events) {
@@ -666,7 +739,7 @@ function renderStatsContent(wrap, events, leaderboardSize) {
   ranking.slice(0, leaderboardSize).forEach((entry, i) => {
     const row = document.createElement("div");
     row.className = "leaderboard-row" + (entry.name === userName ? " me" : "");
-    row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${entry.name}</span><span class="pts">${entry.points} pct</span>`;
+    row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${escapeHtml(entry.name)}</span><span class="pts">${entry.points} pct</span>`;
     board.appendChild(row);
   });
   wrap.appendChild(board);
@@ -694,7 +767,7 @@ function renderStatsFromScores(wrap, scores, myEvents, leaderboardSize) {
   ranking.slice(0, leaderboardSize).forEach((entry, i) => {
     const row = document.createElement("div");
     row.className = "leaderboard-row" + (entry.name === userName ? " me" : "");
-    row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${entry.name}</span><span class="pts">${entry.points} pct</span>`;
+    row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${escapeHtml(entry.name)}</span><span class="pts">${entry.points} pct</span>`;
     board.appendChild(row);
   });
   wrap.appendChild(board);
@@ -738,9 +811,9 @@ function buildMyStatsPanel(myEvents) {
   if (topMistakes.length > 0) {
     html += `<p class="stat-label">Unde am greșit:</p><ul>`;
     for (const [ref, m] of topMistakes) {
-      const wrongList = [...m.wrong].map((w) => `„${w}”`).join(", ");
+      const wrongList = [...m.wrong].map((w) => `„${escapeHtml(w)}”`).join(", ");
       const label = m.count === 1 ? "greșeală" : "greșeli";
-      html += `<li><strong>${ref}</strong> — ${m.count} ${label}: ${wrongList} → corect: „${m.answer}”</li>`;
+      html += `<li><strong>${escapeHtml(ref)}</strong> — ${m.count} ${label}: ${wrongList} → corect: „${escapeHtml(m.answer)}”</li>`;
     }
     html += `</ul>`;
   } else {
@@ -1018,6 +1091,8 @@ Auth.init((user) => {
   updateUserChip();
   if (user) {
     hideAuthModal();
+    Tracker.flush();
+    Tracker.flushScore();
     syncProgressFromCloud();
   }
 });

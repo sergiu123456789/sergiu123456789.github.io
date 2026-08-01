@@ -1,4 +1,4 @@
-const CACHE = "citim-impreuna-v44";
+const CACHE = "citim-impreuna-v45";
 const ASSETS = [
   ".",
   "index.html",
@@ -12,6 +12,7 @@ const ASSETS = [
   "js/verses.js",
   "manifest.webmanifest",
   "icons/icon.svg",
+  "media/bible-book.jpg",
 ];
 
 self.addEventListener("install", (event) => {
@@ -44,6 +45,10 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() =>
+        caches.match(event.request).then((response) =>
+          response || caches.match(event.request, { ignoreSearch: true })
+        )
+      )
   );
 });

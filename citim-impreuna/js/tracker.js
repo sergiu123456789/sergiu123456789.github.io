@@ -3,12 +3,14 @@
 
 const Tracker = (() => {
   const QUEUE_KEY = "ci_pending_events";
+  const SCORE_KEY = "ci_pending_score";
   const enabled =
     typeof SUPABASE_URL === "string" &&
     SUPABASE_URL.startsWith("https://") &&
     typeof SUPABASE_ANON_KEY === "string" &&
     SUPABASE_ANON_KEY.length > 0;
   let flushing = false;
+  let scoreFlushing = false;
 
   // Antetele pentru Supabase. `apikey` rămâne mereu cheia anon (identifică
   // proiectul), dar `Authorization` poartă JWT-ul utilizatorului logat — așa
@@ -41,6 +43,19 @@ const Tracker = (() => {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
   }
 
+  function readPendingScore() {
+    try {
+      return JSON.parse(localStorage.getItem(SCORE_KEY) || "null");
+    } catch {
+      return null;
+    }
+  }
+
+  function writePendingScore(value) {
+    if (value) localStorage.setItem(SCORE_KEY, JSON.stringify(value));
+    else localStorage.removeItem(SCORE_KEY);
+  }
+
   function log(evt) {
     if (!enabled) return;
     const q = readQueue();
@@ -58,12 +73,13 @@ const Tracker = (() => {
     if (!enabled || flushing) return;
     const batch = readQueue();
     if (batch.length === 0) return;
+    const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
+    if (!userId) return;
     flushing = true;
     let sent = false;
     // user_id trimis explicit — DEFAULT auth.uid() pe coloană nu se completează
     // fiabil la inserare (RLS respinge scrierea, 42501, chiar dacă auth.uid()
     // e corect peste tot altundeva); politica cere user_id = auth.uid().
-    const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
     const payload = batch.map((evt) => ({ ...evt, user_id: userId }));
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
@@ -111,6 +127,8 @@ const Tracker = (() => {
 
   async function fetchUserEvents(userName) {
     if (!enabled || !userName) return [];
+    const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
+    if (!userId) return [];
     // ilike fără wildcards = egalitate case-insensitive (prinde și numele
     // vechi salvate cu literă mică, ex. "sergiu" vs "Sergiu").
     // Paginat (cap Supabase = 1000/cerere) ca scorul să fie corect chiar și
@@ -121,7 +139,7 @@ const Tracker = (() => {
       const url =
         `${SUPABASE_URL}/rest/v1/events` +
         `?select=verse_ref,correct,created_at,cycle,answer,chosen` +
-        `&user_name=ilike.${encodeURIComponent(userName)}` +
+        `&user_id=eq.${encodeURIComponent(userId)}` +
         `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
       const res = await fetch(url, { headers: await authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -140,8 +158,12 @@ const Tracker = (() => {
     if (!enabled) return [];
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/scores?select=user_name,points&order=points.desc`,
-        { headers: await authHeaders() }
+        `${SUPABASE_URL}/rest/v1/rpc/get_public_leaderboard`,
+        {
+          method: "POST",
+          headers: await authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ p_limit: 1000 }),
+        }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
@@ -161,17 +183,38 @@ const Tracker = (() => {
   // Fire-and-forget: eșecul nu blochează jocul.
   async function upsertScore(userName, points) {
     if (!enabled || !userName) return;
+    const previous = readPendingScore();
+    writePendingScore({
+      userName,
+      points: Math.max(Number(points) || 0, previous?.userName === userName ? previous.points || 0 : 0),
+    });
+    await flushScore();
+  }
+
+  async function flushScore() {
+    if (!enabled || scoreFlushing) return;
+    const pending = readPendingScore();
+    if (!pending) return;
+    const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
+    if (!userId) return;
+    scoreFlushing = true;
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_own_score`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_own_score`, {
         method: "POST",
         headers: await authHeaders({
           "Content-Type": "application/json",
         }),
-        body: JSON.stringify({ p_user_name: userName, p_points: points }),
+        body: JSON.stringify({ p_user_name: pending.userName, p_points: pending.points }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const current = readPendingScore();
+      if (current?.userName === pending.userName && current?.points === pending.points) {
+        writePendingScore(null);
+      }
     } catch {
       // offline sau tabel lipsă — se reîncearcă la următoarea schimbare de scor
     }
+    scoreFlushing = false;
   }
 
   const DEFAULT_LEADERBOARD_SIZE = 5;
@@ -192,7 +235,10 @@ const Tracker = (() => {
     }
   }
 
-  window.addEventListener("online", flush);
+  window.addEventListener("online", () => {
+    flush();
+    flushScore();
+  });
 
-  return { enabled, log, flush, fetchAll, fetchUserEvents, fetchScores, upsertScore, fetchConfig };
+  return { enabled, log, flush, flushScore, fetchAll, fetchUserEvents, fetchScores, upsertScore, fetchConfig };
 })();
