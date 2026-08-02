@@ -736,7 +736,7 @@ function renderStatsContent(wrap, events, leaderboardSize) {
   const board = document.createElement("div");
   board.className = "leaderboard";
   board.innerHTML = "<h3>🏆 Clasament</h3>";
-  ranking.slice(0, leaderboardSize).forEach((entry, i) => {
+  ranking.filter((entry) => entry.points > 0).forEach((entry, i) => {
     const row = document.createElement("div");
     row.className = "leaderboard-row" + (entry.name === userName ? " me" : "");
     row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${escapeHtml(entry.name)}</span><span class="pts">${entry.points} pct</span>`;
@@ -764,7 +764,7 @@ function renderStatsFromScores(wrap, scores, myEvents, leaderboardSize) {
   const board = document.createElement("div");
   board.className = "leaderboard";
   board.innerHTML = "<h3>🏆 Clasament</h3>";
-  ranking.slice(0, leaderboardSize).forEach((entry, i) => {
+  ranking.filter((entry) => entry.points > 0).forEach((entry, i) => {
     const row = document.createElement("div");
     row.className = "leaderboard-row" + (entry.name === userName ? " me" : "");
     row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${escapeHtml(entry.name)}</span><span class="pts">${entry.points} pct</span>`;
