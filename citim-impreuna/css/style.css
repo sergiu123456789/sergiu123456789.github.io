@@ -637,7 +637,7 @@ footer {
 .m-beam {
   position: absolute;
   top: 0;
-  left: 52%;
+  left: 51.5%;
   width: min(720px, 100vw);
   height: 55%;
   transform: translateX(-50%);
@@ -659,7 +659,7 @@ footer {
 .m-glow {
   position: absolute;
   top: 55%;
-  left: 52%;
+  left: 51.5%;
   width: 640px;
   height: 560px;
   transform: translate(-50%, -50%);
