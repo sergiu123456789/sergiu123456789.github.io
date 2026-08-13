@@ -437,6 +437,23 @@ function showStreakMessage() {
   launchCelebration("fireworks");
 }
 
+function showWelcomeMessage(name) {
+  const overlay = document.createElement("div");
+  overlay.className = "welcome-overlay";
+  overlay.innerHTML = `
+    <section class="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+      <div class="welcome-icon">📖</div>
+      <h2 id="welcome-title">Bine ai revenit, ${escapeHtml(name)}!</h2>
+      <p>Domnul să te binecuvanteze!</p>
+      <button class="btn primary" type="button">Continuă</button>
+    </section>`;
+  overlay.querySelector("button").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+  document.body.appendChild(overlay);
+}
+
 function nextPage() {
   page += 1;
   save();
@@ -524,6 +541,7 @@ async function handleLogin() {
     Tracker.flush();
     Tracker.refreshScore();
     syncProgressFromCloud();
+    showWelcomeMessage(userName);
   } catch (err) {
     setAuthError(el.loginError, err.message);
   } finally {
@@ -1140,6 +1158,7 @@ Auth.init((user) => {
     Tracker.flush();
     Tracker.refreshScore();
     syncProgressFromCloud();
+    showWelcomeMessage(userName);
   }
 });
 

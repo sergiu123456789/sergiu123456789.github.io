@@ -311,6 +311,56 @@ select.blank.wrong {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(35, 25, 58, 0.68);
+  animation: streak-fade-in 0.25s ease-out;
+}
+
+.welcome-modal {
+  position: relative;
+  z-index: 42;
+  width: min(100%, 390px);
+  padding: 30px 24px 24px;
+  border: 2px solid rgba(240, 180, 41, 0.55);
+  border-radius: 24px;
+  background: linear-gradient(145deg, #fffdf5, #fff6d6);
+  box-shadow: 0 18px 60px rgba(27, 17, 50, 0.38);
+  text-align: center;
+  font-family: system-ui, sans-serif;
+  animation: streak-pop 0.35s ease-out;
+}
+
+.welcome-icon {
+  margin-bottom: 12px;
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.welcome-modal h2 {
+  margin: 0 auto 14px;
+  color: var(--accent);
+  font-size: clamp(1.3rem, 5vw, 1.7rem);
+  line-height: 1.2;
+}
+
+.welcome-modal p {
+  margin: 8px auto 20px;
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.welcome-modal .btn {
+  min-width: 150px;
+}
+
 .actions {
   display: flex;
   flex-direction: column;
