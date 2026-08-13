@@ -3,14 +3,13 @@
 
 const Tracker = (() => {
   const QUEUE_KEY = "ci_pending_events";
-  const SCORE_KEY = "ci_pending_score";
   const enabled =
     typeof SUPABASE_URL === "string" &&
     SUPABASE_URL.startsWith("https://") &&
     typeof SUPABASE_ANON_KEY === "string" &&
     SUPABASE_ANON_KEY.length > 0;
   let flushing = false;
-  let scoreFlushing = false;
+  let scoreRefreshing = false;
 
   // Antetele pentru Supabase. `apikey` rămâne mereu cheia anon (identifică
   // proiectul), dar `Authorization` poartă JWT-ul utilizatorului logat — așa
@@ -41,19 +40,6 @@ const Tracker = (() => {
 
   function writeQueue(q) {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-  }
-
-  function readPendingScore() {
-    try {
-      return JSON.parse(localStorage.getItem(SCORE_KEY) || "null");
-    } catch {
-      return null;
-    }
-  }
-
-  function writePendingScore(value) {
-    if (value) localStorage.setItem(SCORE_KEY, JSON.stringify(value));
-    else localStorage.removeItem(SCORE_KEY);
   }
 
   function log(evt) {
@@ -101,7 +87,11 @@ const Tracker = (() => {
       flushing = false;
     }
     // dacă au mai sosit evenimente cât timp acest batch era în tranzit, continuă
-    if (sent && readQueue().length > 0) flush();
+    if (sent) {
+      // Scorul este recalculat de server numai după ce evenimentele au ajuns acolo.
+      await refreshScore();
+      if (readQueue().length > 0) flush();
+    }
   }
 
   async function fetchAll() {
@@ -151,9 +141,8 @@ const Tracker = (() => {
   }
 
   // Clasamentul agregat: un singur rând per utilizator (user_name, points),
-  // menținut de client prin upsertScore(). Înlocuiește descărcarea tuturor
-  // evenimentelor la fiecare deschidere de statistici (vezi fetchAll), ca
-  // banda să nu crească odată cu numărul de utilizatori.
+  // derivat de Supabase din evenimente. Evită descărcarea întregului istoric
+  // la fiecare deschidere de statistici.
   async function fetchScores() {
     if (!enabled) return [];
     try {
@@ -173,48 +162,26 @@ const Tracker = (() => {
     }
   }
 
-  // Scrie scorul canonic al utilizatorului (calculat de client cu
-  // computePointsForUser) în tabelul `scores`, via funcția RPC
-  // upsert_own_score — un simplu upsert direct pe tabel (INSERT ... ON
-  // CONFLICT DO UPDATE) eșua mereu sub RLS (bug confirmat empiric: WITH
-  // CHECK-ul politicii de INSERT nu trece pe ramura de conflict/UPDATE,
-  // deși valorile sunt identic corecte); funcția face upsert-ul intern,
-  // cu propria verificare de proprietate (user_id = auth.uid()).
-  // Fire-and-forget: eșecul nu blochează jocul.
-  async function upsertScore(userName, points) {
-    if (!enabled || !userName) return;
-    const previous = readPendingScore();
-    writePendingScore({
-      userName,
-      points: Math.max(Number(points) || 0, previous?.userName === userName ? previous.points || 0 : 0),
-    });
-    await flushScore();
-  }
-
-  async function flushScore() {
-    if (!enabled || scoreFlushing) return;
-    const pending = readPendingScore();
-    if (!pending) return;
+  // Supabase derivează scorul exclusiv din evenimentele utilizatorului curent.
+  // Browserul nu mai transmite niciun total de puncte care ar putea fi modificat.
+  async function refreshScore() {
+    if (!enabled || scoreRefreshing) return;
     const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
     if (!userId) return;
-    scoreFlushing = true;
+    scoreRefreshing = true;
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_own_score`, {
         method: "POST",
         headers: await authHeaders({
           "Content-Type": "application/json",
         }),
-        body: JSON.stringify({ p_user_name: pending.userName, p_points: pending.points }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const current = readPendingScore();
-      if (current?.userName === pending.userName && current?.points === pending.points) {
-        writePendingScore(null);
-      }
     } catch {
-      // offline sau tabel lipsă — se reîncearcă la următoarea schimbare de scor
+      // Offline sau eroare de rețea — următorul flush de evenimente reîncearcă.
     }
-    scoreFlushing = false;
+    scoreRefreshing = false;
   }
 
   const DEFAULT_LEADERBOARD_SIZE = 5;
@@ -237,8 +204,8 @@ const Tracker = (() => {
 
   window.addEventListener("online", () => {
     flush();
-    flushScore();
+    refreshScore();
   });
 
-  return { enabled, log, flush, flushScore, fetchAll, fetchUserEvents, fetchScores, upsertScore, fetchConfig };
+  return { enabled, log, flush, refreshScore, fetchAll, fetchUserEvents, fetchScores, fetchConfig };
 })();

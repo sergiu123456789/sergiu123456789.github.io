@@ -188,7 +188,7 @@ function showMilestone(m) {
 // ca 📊 să nu mai descarce toate evenimentele. Fire-and-forget.
 async function pushScore() {
   if (!Tracker.enabled || !userName) return;
-  return Tracker.upsertScore(userName, score);
+  return Tracker.refreshScore();
 }
 
 function buildVerseCard(v) {
@@ -333,6 +333,8 @@ function checkAnswers() {
       chosen: s.value,
       correct: s.value === s.dataset.answer,
       cycle,
+      page_index: page,
+      page_size: selects.length,
     });
     if (s.value === s.dataset.answer) {
       const span = document.createElement("span");
@@ -472,7 +474,7 @@ async function handleLogin() {
     el.loginPassword.value = "";
     progressSynced = false;
     Tracker.flush();
-    Tracker.flushScore();
+    Tracker.refreshScore();
     syncProgressFromCloud();
   } catch (err) {
     setAuthError(el.loginError, err.message);
@@ -629,20 +631,7 @@ async function renderStats() {
       wrap.innerHTML = "<p>Clasamentul nu este disponibil momentan. Încearcă din nou mai târziu.</p>";
       return;
     }
-    const myPoints = computePointsForUser(myEvents);
-    const currentName = normName(userName);
-    const currentRow = scores.find((entry) => normName(entry.user_name) === currentName);
-    if (currentRow) currentRow.points = myPoints;
-    else if (userName) scores.push({ user_name: userName, points: myPoints });
     renderStatsFromScores(wrap, scores, myEvents, config.leaderboard_size);
-    /*
-      // Tabelul `scores` încă nu există sau nu e populat — recurge la calculul
-      // clasic din toate evenimentele, ca statisticile să funcționeze oricum.
-      if (events.length === 0) {
-        wrap.innerHTML = "<p>Nicio activitate înregistrată încă.</p>";
-      } else {
-      }
-    */
   } catch {
     wrap.innerHTML = "<p>Statisticile au nevoie de internet. Încearcă din nou mai târziu.</p>";
   }
@@ -1092,7 +1081,7 @@ Auth.init((user) => {
   if (user) {
     hideAuthModal();
     Tracker.flush();
-    Tracker.flushScore();
+    Tracker.refreshScore();
     syncProgressFromCloud();
   }
 });
