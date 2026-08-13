@@ -215,7 +215,8 @@ async function pushScore() {
 async function refreshAndSyncScore() {
   if (!Tracker.enabled || !userName) return;
   await Tracker.flush();
-  await Tracker.refreshScore();
+  // Triggerul din Supabase actualizeaza scorul la fiecare eveniment nou.
+  // Citim apoi totalul autoritativ, inclusiv daca a fost corectat din server.
   await syncScoreFromServer();
 }
 
@@ -638,13 +639,9 @@ async function syncProgressFromCloud() {
     }
     cycle = Math.max(cycle, cloudCycle);
 
-    // Scorul canonic din baza de date — aceeași valoare ca în clasament,
-    // ca ⭐ din antet să nu mai difere de 📊.
-    score = computePointsForUser(events);
-    el.score.textContent = score;
-    // Împrospătează rândul din clasament cu scorul canonic (și auto-populează
-    // tabelul `scores` la prima logare a fiecărui utilizator după migrare).
-    await pushScore();
+    // Nu calculam scorul din evenimente in browser: totalul serverului include
+    // baseline-ul si bonusurile, deci ramane identic cu cel din clasament.
+    await refreshAndSyncScore();
 
     // Paginile deja terminate în ciclul curent, calculate din cloud — astfel
     // restricția „nu poți relua o pagină" ține și dacă schimbă dispozitivul.
@@ -1139,6 +1136,12 @@ el.score.textContent = score;
 if (page >= totalPages) page = 0;
 renderPage();
 Tracker.flush();
+
+// Daca scorul a fost actualizat pe alt dispozitiv sau corectat de administrator,
+// afiseaza totalul curent imediat ce utilizatorul revine in aplicatie.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshAndSyncScore();
+});
 
 // Arătăm modalul imediat — nu așteptăm Supabase (poate fi lent/offline).
 // Dacă sesiunea se restaurează, onAuthStateChange ascunde modalul automat.
