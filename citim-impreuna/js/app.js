@@ -418,11 +418,22 @@ function celebrate(bonus) {
 }
 
 function showStreakMessage() {
-  el.cheer.innerHTML = `
-    <div class="big">🎉 Felicitări pentru perseverență și consecvență!</div>
-    <div class="streak-message">Ai citit cel puțin un capitol din Biblie în ultimele 7 zile.<br>Slavă Domnului!</div>
-    <div class="points">+2.000 puncte bonus pentru consecvență!</div>`;
-  el.cheer.hidden = false;
+  const overlay = document.createElement("div");
+  overlay.className = "streak-overlay";
+  overlay.innerHTML = `
+    <section class="streak-modal" role="dialog" aria-modal="true" aria-labelledby="streak-title">
+      <div class="streak-icon">🎉</div>
+      <h2 id="streak-title">Felicitări pentru perseverență și consecvență!</h2>
+      <p>Ai citit cel puțin un capitol din Biblie în ultimele 7 zile.</p>
+      <p class="streak-glory">Slavă Domnului!</p>
+      <strong>+2.000 puncte bonus pentru consecvență!</strong>
+      <button class="btn primary" type="button">Continuă</button>
+    </section>`;
+  overlay.querySelector("button").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+  document.body.appendChild(overlay);
   launchCelebration("fireworks");
 }
 
@@ -1108,6 +1119,14 @@ Tracker.flush();
 // Arătăm modalul imediat — nu așteptăm Supabase (poate fi lent/offline).
 // Dacă sesiunea se restaurează, onAuthStateChange ascunde modalul automat.
 showAuthModal();
+
+// Local preview only; never active on the public site and never writes data.
+if (location.hostname === "localhost" && new URLSearchParams(location.search).has("demo-streak")) {
+  setTimeout(() => {
+    el.authModal.hidden = true;
+    showStreakMessage();
+  }, 500);
+}
 
 Auth.init((user) => {
   userName = user || "";
