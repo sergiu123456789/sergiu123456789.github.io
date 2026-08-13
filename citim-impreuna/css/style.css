@@ -231,6 +231,14 @@ select.blank.wrong {
   color: var(--good);
 }
 
+.cheer .streak-message {
+  margin: 8px auto 0;
+  max-width: 560px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
 .actions {
   display: flex;
   flex-direction: column;

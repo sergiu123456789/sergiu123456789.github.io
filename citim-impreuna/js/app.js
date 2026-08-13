@@ -194,12 +194,14 @@ function showMilestone(m) {
   setTimeout(() => launchCelebration("fireworks"), 1100);
 }
 
-async function syncScoreFromServer() {
+async function syncScoreFromServer({ announceStreak = false, localScoreBefore = score, localGain = 0 } = {}) {
   const serverScore = await Tracker.fetchOwnScore();
   if (!Number.isFinite(serverScore) || serverScore < 0) return;
+  const streakBonus = serverScore - localScoreBefore - localGain;
   score = serverScore;
   el.score.textContent = score;
   save();
+  if (announceStreak && streakBonus >= 2000) showStreakMessage();
 }
 
 // Supabase recalculează scorul din evenimentele înregistrate și poate adăuga
@@ -343,6 +345,7 @@ function checkAnswers() {
     return;
   }
 
+  const scoreBefore = score;
   let earned = 0;
   for (const s of selects) {
     const chapter = chapterMetaForRef(s.dataset.ref);
@@ -381,7 +384,11 @@ function checkAnswers() {
     solvedThisCycle.add(page);
     clearPageMistake();
     saveSolvedThisCycle();
-    flushPromise.then(syncScoreFromServer);
+    flushPromise.then(() => syncScoreFromServer({
+      announceStreak: true,
+      localScoreBefore: scoreBefore,
+      localGain: earned + bonus,
+    }));
     celebrate(bonus);
   }
 }
@@ -408,6 +415,15 @@ function celebrate(bonus) {
     setTimeout(showFinal, 1600);
   }
   launchCelebration();
+}
+
+function showStreakMessage() {
+  el.cheer.innerHTML = `
+    <div class="big">🎉 Felicitări pentru perseverență și consecvență!</div>
+    <div class="streak-message">Ai citit cel puțin un capitol din Biblie în ultimele 7 zile.<br>Slavă Domnului!</div>
+    <div class="points">+2.000 puncte bonus pentru consecvență!</div>`;
+  el.cheer.hidden = false;
+  launchCelebration("fireworks");
 }
 
 function nextPage() {
