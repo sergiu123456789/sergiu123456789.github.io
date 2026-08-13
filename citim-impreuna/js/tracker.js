@@ -8,8 +8,8 @@ const Tracker = (() => {
     SUPABASE_URL.startsWith("https://") &&
     typeof SUPABASE_ANON_KEY === "string" &&
     SUPABASE_ANON_KEY.length > 0;
-  let flushing = false;
-  let scoreRefreshing = false;
+  let flushPromise = null;
+  let scoreRefreshPromise = null;
 
   // Antetele pentru Supabase. `apikey` rămâne mereu cheia anon (identifică
   // proiectul), dar `Authorization` poartă JWT-ul utilizatorului logat — așa
@@ -56,42 +56,41 @@ const Tracker = (() => {
   }
 
   async function flush() {
-    if (!enabled || flushing) return;
-    const batch = readQueue();
-    if (batch.length === 0) return;
-    const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
-    if (!userId) return;
-    flushing = true;
-    let sent = false;
-    // user_id trimis explicit — DEFAULT auth.uid() pe coloană nu se completează
-    // fiabil la inserare (RLS respinge scrierea, 42501, chiar dacă auth.uid()
-    // e corect peste tot altundeva); politica cere user_id = auth.uid().
-    const payload = batch.map((evt) => ({ ...evt, user_id: userId }));
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
-        method: "POST",
-        headers: await authHeaders({
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        // golește doar ce s-a trimis; evenimente sosite între timp rămân în coadă
-        writeQueue(readQueue().slice(batch.length));
-        sent = true;
+    if (!enabled) return false;
+    if (flushPromise) return flushPromise;
+
+    flushPromise = (async () => {
+      let sentAny = false;
+      while (true) {
+        const batch = readQueue();
+        if (batch.length === 0) return sentAny;
+        const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
+        if (!userId) return sentAny;
+        const payload = batch.map((evt) => ({ ...evt, user_id: userId }));
+        try {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
+            method: "POST",
+            headers: await authHeaders({
+              "Content-Type": "application/json",
+              Prefer: "return=minimal",
+            }),
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) return sentAny;
+          // Evenimente adăugate în timpul trimiterii sunt procesate în următoarea
+          // iterație înainte ca apelantul să poată citi scorul serverului.
+          writeQueue(readQueue().slice(batch.length));
+          sentAny = true;
+          await refreshScore();
+        } catch {
+          // Offline sau eroare de rețea — coada rămâne pentru următoarea încercare.
+          return sentAny;
+        }
       }
-    } catch {
-      // offline sau eroare de rețea — coada rămâne pentru următoarea încercare
-    } finally {
-      flushing = false;
-    }
-    // dacă au mai sosit evenimente cât timp acest batch era în tranzit, continuă
-    if (sent) {
-      // Scorul este recalculat de server numai după ce evenimentele au ajuns acolo.
-      await refreshScore();
-      if (readQueue().length > 0) flush();
-    }
+    })().finally(() => {
+      flushPromise = null;
+    });
+    return flushPromise;
   }
 
   async function fetchAll() {
@@ -176,23 +175,28 @@ const Tracker = (() => {
   // Supabase derivează scorul exclusiv din evenimentele utilizatorului curent.
   // Browserul nu mai transmite niciun total de puncte care ar putea fi modificat.
   async function refreshScore() {
-    if (!enabled || scoreRefreshing) return;
+    if (!enabled) return false;
+    if (scoreRefreshPromise) return scoreRefreshPromise;
     const userId = typeof Auth !== "undefined" && Auth.getUserId ? Auth.getUserId() : null;
-    if (!userId) return;
-    scoreRefreshing = true;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_own_score`, {
-        method: "POST",
-        headers: await authHeaders({
-          "Content-Type": "application/json",
-        }),
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch {
-      // Offline sau eroare de rețea — următorul flush de evenimente reîncearcă.
-    }
-    scoreRefreshing = false;
+    if (!userId) return false;
+    scoreRefreshPromise = (async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_own_score`, {
+          method: "POST",
+          headers: await authHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({}),
+        });
+        return res.ok;
+      } catch {
+        // Offline sau eroare de rețea — următorul flush de evenimente reîncearcă.
+        return false;
+      }
+    })().finally(() => {
+      scoreRefreshPromise = null;
+    });
+    return scoreRefreshPromise;
   }
 
   const DEFAULT_LEADERBOARD_SIZE = 5;

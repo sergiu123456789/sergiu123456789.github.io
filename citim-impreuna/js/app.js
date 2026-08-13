@@ -212,6 +212,13 @@ async function pushScore() {
   await syncScoreFromServer();
 }
 
+async function refreshAndSyncScore() {
+  if (!Tracker.enabled || !userName) return;
+  await Tracker.flush();
+  await Tracker.refreshScore();
+  await syncScoreFromServer();
+}
+
 function buildVerseCard(v) {
   const card = document.createElement("section");
   card.className = "card";
@@ -538,9 +545,8 @@ async function handleLogin() {
     updateUserChip();
     el.loginPassword.value = "";
     progressSynced = false;
-    Tracker.flush();
-    Tracker.refreshScore();
-    syncProgressFromCloud();
+    await refreshAndSyncScore();
+    await syncProgressFromCloud();
     showWelcomeMessage(userName);
   } catch (err) {
     setAuthError(el.loginError, err.message);
@@ -1138,26 +1144,17 @@ Tracker.flush();
 // Dacă sesiunea se restaurează, onAuthStateChange ascunde modalul automat.
 showAuthModal();
 
-// Local preview only; never active on the public site and never writes data.
-if (location.hostname === "localhost" && new URLSearchParams(location.search).has("demo-streak")) {
-  setTimeout(() => {
-    el.authModal.hidden = true;
-    showStreakMessage();
-  }, 500);
-}
-
 Auth.init((user) => {
   userName = user || "";
   updateUserChip();
   if (user) hideAuthModal();
-}).then((user) => {
+}).then(async (user) => {
   userName = user || "";
   updateUserChip();
   if (user) {
     hideAuthModal();
-    Tracker.flush();
-    Tracker.refreshScore();
-    syncProgressFromCloud();
+    await refreshAndSyncScore();
+    await syncProgressFromCloud();
     showWelcomeMessage(userName);
   }
 });
