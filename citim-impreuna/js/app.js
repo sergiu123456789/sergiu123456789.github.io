@@ -424,7 +424,7 @@ function showStreakMessage() {
     <section class="streak-modal" role="dialog" aria-modal="true" aria-labelledby="streak-title">
       <div class="streak-icon">🎉</div>
       <h2 id="streak-title">Felicitări pentru perseverență și consecvență!</h2>
-      <p>Ai citit cel puțin un capitol din Biblie în ultimele 7 zile.</p>
+      <p>Ai citit cel puțin un capitol din Biblie în fiecare zi, 7 zile la rând.<br>Streak complet!</p>
       <p class="streak-glory">Slavă Domnului!</p>
       <strong>+2.000 puncte bonus pentru consecvență!</strong>
       <button class="btn primary" type="button">Continuă</button>
