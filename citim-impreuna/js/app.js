@@ -33,6 +33,16 @@ const totalPages = Math.ceil(VERSES.length / PAGE_SIZE);
 // Verset → indexul paginii pe care se află (pentru sincronizarea progresului
 // între dispozitive, calculată din evenimentele stocate în Supabase).
 const REF_PAGE = new Map(VERSES.map((v, i) => [v.ref, Math.floor(i / PAGE_SIZE)]));
+const CHAPTER_SIZES = new Map();
+for (const verse of VERSES) {
+  const chapterRef = verse.ref.replace(/:\d+$/, "");
+  CHAPTER_SIZES.set(chapterRef, (CHAPTER_SIZES.get(chapterRef) || 0) + 1);
+}
+
+function chapterMetaForRef(ref) {
+  const chapter_ref = ref.replace(/:\d+$/, "");
+  return { chapter_ref, chapter_size: CHAPTER_SIZES.get(chapter_ref) || 0 };
+}
 
 const el = {
   score: document.getElementById("score"),
@@ -184,11 +194,20 @@ function showMilestone(m) {
   setTimeout(() => launchCelebration("fireworks"), 1100);
 }
 
-// Publică scorul curent în tabelul agregat `scores` (un rând per utilizator),
-// ca 📊 să nu mai descarce toate evenimentele. Fire-and-forget.
+async function syncScoreFromServer() {
+  const serverScore = await Tracker.fetchOwnScore();
+  if (!Number.isFinite(serverScore) || serverScore < 0) return;
+  score = serverScore;
+  el.score.textContent = score;
+  save();
+}
+
+// Supabase recalculează scorul din evenimentele înregistrate și poate adăuga
+// bonusuri de consecvență care nu există în starea locală.
 async function pushScore() {
   if (!Tracker.enabled || !userName) return;
-  return Tracker.refreshScore();
+  await Tracker.refreshScore();
+  await syncScoreFromServer();
 }
 
 function buildVerseCard(v) {
@@ -326,6 +345,7 @@ function checkAnswers() {
 
   let earned = 0;
   for (const s of selects) {
+    const chapter = chapterMetaForRef(s.dataset.ref);
     Tracker.log({
       user_name: userName || "necunoscut",
       verse_ref: s.dataset.ref,
@@ -335,6 +355,7 @@ function checkAnswers() {
       cycle,
       page_index: page,
       page_size: selects.length,
+      ...chapter,
     });
     if (s.value === s.dataset.answer) {
       const span = document.createElement("span");
@@ -348,7 +369,7 @@ function checkAnswers() {
       flashWrong(s, true);
     }
   }
-  Tracker.flush();
+  const flushPromise = Tracker.flush();
   if (earned > 0) updateScore(earned);
 
   if (!el.container.querySelector("select.blank")) {
@@ -360,7 +381,7 @@ function checkAnswers() {
     solvedThisCycle.add(page);
     clearPageMistake();
     saveSolvedThisCycle();
-    pushScore();
+    flushPromise.then(syncScoreFromServer);
     celebrate(bonus);
   }
 }
@@ -554,6 +575,7 @@ async function syncProgressFromCloud() {
   if (progressSynced || !Tracker.enabled || !userName) return;
   progressSynced = true;
   try {
+    await Tracker.flush();
     const events = await Tracker.fetchUserEvents(userName);
 
     // Sincronizează ciclul curent de pe orice dispozitiv: cel puțin cel mai mare

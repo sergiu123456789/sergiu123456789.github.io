@@ -162,6 +162,17 @@ const Tracker = (() => {
     }
   }
 
+  async function fetchOwnScore() {
+    const userName = typeof Auth !== "undefined" && Auth.currentUser ? Auth.currentUser() : null;
+    if (!userName) return null;
+    const scores = await fetchScores();
+    const target = userName.toLocaleLowerCase("ro-RO");
+    const row = scores.find((entry) =>
+      String(entry.user_name || "").toLocaleLowerCase("ro-RO") === target
+    );
+    return row ? Number(row.points) || 0 : null;
+  }
+
   // Supabase derivează scorul exclusiv din evenimentele utilizatorului curent.
   // Browserul nu mai transmite niciun total de puncte care ar putea fi modificat.
   async function refreshScore() {
@@ -207,5 +218,5 @@ const Tracker = (() => {
     refreshScore();
   });
 
-  return { enabled, log, flush, refreshScore, fetchAll, fetchUserEvents, fetchScores, fetchConfig };
+  return { enabled, log, flush, refreshScore, fetchAll, fetchUserEvents, fetchScores, fetchOwnScore, fetchConfig };
 })();
