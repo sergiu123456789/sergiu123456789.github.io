@@ -1,14 +1,60 @@
 /* Fundaluri animate — scene biblice drăguțe pentru copii de 10 ani.
    Fiecare scenă: init(w,h)->stare, draw(ctx,w,h,age,stare). */
 
+// Ilustratii realiste, optimizate pentru telefon. Formele animate raman peste
+// ele pentru ca fiecare decor sa pastreze miscare si legatura cu textul paginii.
+const BACKDROP_SOURCES = {
+  temple: 'media/scenes/temple-realistic.webp',
+  desert: 'media/scenes/desert-realistic.webp',
+  valley: 'media/scenes/valley-realistic.webp',
+  city: 'media/scenes/city-realistic.webp',
+  night: 'media/scenes/night-realistic.webp',
+};
+
+const BACKDROP_FOR_SCENE = {
+  templu: 'temple', razboi: 'desert', imparat: 'city', pustie: 'desert',
+  pastor: 'valley', apa: 'valley', cetate: 'city', noapte: 'night',
+  munte: 'valley', rugaciune: 'night', fuga: 'desert', victorie: 'valley',
+  pergament: 'night',
+};
+
+const BACKDROPS = new Map();
+let activeBackdrop = null;
+
+Object.entries(BACKDROP_SOURCES).forEach(([name, src]) => {
+  const image = new Image();
+  image.src = src;
+  BACKDROPS.set(name, image);
+});
+
 /* ── utilitare ─────────────────────────────────────────────── */
 function rnd(a, b) { return a + Math.random() * (b - a); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function skyGrad(ctx, w, h, stops) {
+  if (activeBackdrop?.complete && activeBackdrop.naturalWidth) {
+    const sourceRatio = activeBackdrop.naturalWidth / activeBackdrop.naturalHeight;
+    const targetRatio = w / h;
+    let sx = 0, sy = 0, sw = activeBackdrop.naturalWidth, sh = activeBackdrop.naturalHeight;
+    if (sourceRatio > targetRatio) {
+      sw = activeBackdrop.naturalHeight * targetRatio;
+      sx = (activeBackdrop.naturalWidth - sw) / 2;
+    } else {
+      sh = activeBackdrop.naturalWidth / targetRatio;
+      sy = (activeBackdrop.naturalHeight - sh) * .32;
+    }
+    ctx.drawImage(activeBackdrop, sx, sy, sw, sh, 0, 0, w, h);
+    // Pastreaza imaginile luminoase si aerisite pe telefon, fara sa piarda
+    // contrastul scenelor de noapte sau al cetatii.
+    ctx.fillStyle = 'rgba(255, 246, 215, .16)';
+    ctx.fillRect(0, 0, w, h);
+  }
   const g = ctx.createLinearGradient(0, 0, 0, h);
   stops.forEach(([p, c]) => g.addColorStop(p, c));
+  ctx.save();
+  ctx.globalAlpha = activeBackdrop ? .36 : 1;
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.restore();
 }
 
 function star5(ctx, x, y, r, col, alpha) {
@@ -960,9 +1006,11 @@ const SceneEngine = (() => {
     if (offsetX) ctx.translate(offsetX, 0);
     if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
     try {
+      activeBackdrop = BACKDROPS.get(BACKDROP_FOR_SCENE[entry.scene.id]) || null;
       entry.scene.draw(ctx, w, h, now - entry.start, entry.state);
       sceneAtmosphere(ctx, w, h, now - entry.start);
     } catch(e) {}
+    activeBackdrop = null;
     ctx.restore();
   }
 
