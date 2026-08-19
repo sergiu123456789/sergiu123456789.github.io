@@ -82,6 +82,47 @@ function hillBand(ctx, w, h, baseY, amp, freq, phase, col) {
   ctx.restore();
 }
 
+/* Finisaj comun: profunzime atmosferica, particule fine si vigneta discreta. */
+function sceneAtmosphere(ctx, w, h, age) {
+  const t = age / 1000;
+  const haze = ctx.createLinearGradient(0, h * .48, 0, h * .9);
+  haze.addColorStop(0, 'rgba(255,255,255,0)');
+  haze.addColorStop(.62, 'rgba(255,255,255,.035)');
+  haze.addColorStop(1, 'rgba(20,35,40,.12)');
+  ctx.fillStyle = haze; ctx.fillRect(0, h * .42, w, h * .58);
+
+  ctx.save();
+  ctx.globalAlpha = .075;
+  ctx.fillStyle = '#FFF6D5';
+  for (let i = 0; i < 22; i++) {
+    const x = ((i * 97 + t * (4 + i % 3)) % (w + 40)) - 20;
+    const y = h * (.45 + ((i * 37) % 48) / 100);
+    ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * .45, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  const edge = ctx.createRadialGradient(w * .5, h * .42, h * .18, w * .5, h * .5, h * .85);
+  edge.addColorStop(0, 'rgba(0,0,0,0)');
+  edge.addColorStop(.7, 'rgba(0,0,0,.015)');
+  edge.addColorStop(1, 'rgba(0,0,0,.2)');
+  ctx.fillStyle = edge; ctx.fillRect(0, 0, w, h);
+}
+
+function stoneTexture(ctx, x, y, width, height, seed = 0) {
+  ctx.save();
+  ctx.globalAlpha = .16;
+  ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 1;
+  for (let row = 0; row < Math.ceil(height / 18); row++) {
+    const yy = y + row * 18;
+    const offset = row % 2 ? 20 : 0;
+    for (let xx = x - offset; xx < x + width; xx += 46) {
+      const wobble = Math.sin(seed + row * 4 + xx * .03) * 2;
+      ctx.strokeRect(xx + wobble, yy, 44, 17);
+    }
+  }
+  ctx.restore();
+}
+
 function flame(ctx, x, y, s, t, seed = 0) {
   const f = 1 + .18 * Math.sin(t * 9 + seed) + .1 * Math.sin(t * 23 + seed * 2);
   [[s,'#FF7043',.9],[s*.66,'#FFA726',.95],[s*.38,'#FFEE58',1]].forEach(([r,c,a]) => {
@@ -252,13 +293,20 @@ const SCENES = [
       ctx.fillStyle='#A1887F'; ctx.fillRect(w*.13,h*.755,w*.74,h*.035);
       // templu
       const tx=w/2, ty=h*.755, tw=Math.min(w*.62,380), th=h*.38;
-      ctx.fillStyle='#FFF9C4'; ctx.fillRect(tx-tw/2,ty-th,tw,th);
+      const templeWall = ctx.createLinearGradient(tx, ty - th, tx, ty);
+      templeWall.addColorStop(0, '#FFFBE5'); templeWall.addColorStop(.6, '#F1D9A5'); templeWall.addColorStop(1, '#B88A5A');
+      ctx.fillStyle=templeWall; ctx.fillRect(tx-tw/2,ty-th,tw,th);
+      stoneTexture(ctx, tx - tw / 2, ty - th, tw, th, 2);
+      ctx.fillStyle='rgba(92,58,35,.22)'; ctx.fillRect(tx-tw/2,ty-th,tw,7);
       // coloane colorate
       const colColors=['#FFD54F','#FF8A65','#CE93D8','#80DEEA','#A5D6A7','#FFD54F'];
       for(let i=0;i<6;i++){
         const cx2=tx-tw/2+tw*(.08+i*.168);
-        ctx.fillStyle=colColors[i]; ctx.fillRect(cx2,ty-th+th*.18,tw*.07,th*.82);
-        ctx.fillStyle='rgba(255,255,255,.4)'; ctx.fillRect(cx2+2,ty-th+th*.18,tw*.02,th*.82);
+        const column = ctx.createLinearGradient(cx2, 0, cx2 + tw*.07, 0);
+        column.addColorStop(0, 'rgba(87,58,43,.34)'); column.addColorStop(.2, colColors[i]); column.addColorStop(.72, 'rgba(255,255,255,.5)'); column.addColorStop(1, 'rgba(87,58,43,.22)');
+        ctx.fillStyle=column; ctx.fillRect(cx2,ty-th+th*.18,tw*.07,th*.82);
+        ctx.fillStyle='rgba(255,248,220,.7)'; ctx.fillRect(cx2-tw*.012,ty-th+th*.14,tw*.094,th*.05);
+        ctx.fillStyle='rgba(92,58,35,.28)'; ctx.fillRect(cx2-tw*.012,ty-th+th*.96,tw*.094,th*.035);
       }
       // fronton
       ctx.fillStyle='#FFB74D'; ctx.beginPath();
@@ -911,7 +959,10 @@ const SceneEngine = (() => {
     ctx.save(); ctx.globalAlpha = alpha;
     if (offsetX) ctx.translate(offsetX, 0);
     if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
-    try { entry.scene.draw(ctx, w, h, now - entry.start, entry.state); } catch(e) {}
+    try {
+      entry.scene.draw(ctx, w, h, now - entry.start, entry.state);
+      sceneAtmosphere(ctx, w, h, now - entry.start);
+    } catch(e) {}
     ctx.restore();
   }
 
