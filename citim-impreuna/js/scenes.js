@@ -169,6 +169,105 @@ function stoneTexture(ctx, x, y, width, height, seed = 0) {
   ctx.restore();
 }
 
+/* Detalii specifice pentru fiecare decor: materiale, profunzime si obiecte
+   mici care fac scena sa para locuita, fara a incarca zona de citire. */
+function drawRefinedDetails(ctx, w, h, age, sceneId) {
+  const t = age / 1000;
+  ctx.save();
+
+  if (sceneId === 'templu') {
+    stoneTexture(ctx, 0, h * .82, w, h * .18, 9);
+    [[.1,.88],[.9,.88]].forEach(([x, y], i) => {
+      ctx.fillStyle = '#8D6E63'; ctx.fillRect(w*x-3, h*y-32, 6, 32);
+      flame(ctx, w*x, h*y-32, 10, t, i + 8);
+    });
+  } else if (sceneId === 'razboi') {
+    ctx.globalAlpha = .42; ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 2;
+    for (let i = 0; i < 10; i++) {
+      const x = w * (.05 + i * .1);
+      ctx.beginPath(); ctx.moveTo(x, h*.82); ctx.lineTo(x + Math.sin(t+i)*4, h*.68); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'imparat') {
+    ctx.globalAlpha = .22; ctx.strokeStyle = '#FFF3C4'; ctx.lineWidth = 2;
+    for (let x = w*.2; x < w*.8; x += 20) {
+      ctx.beginPath(); ctx.moveTo(x, h*.78); ctx.lineTo(w/2, h*.62); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'pustie') {
+    ctx.globalAlpha = .22; ctx.strokeStyle = '#FFF0C4'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 16; i++) {
+      const y = h * (.64 + i * .022);
+      ctx.beginPath(); ctx.moveTo((i%2)*-30, y); ctx.quadraticCurveTo(w*.5, y - 9, w + 30, y + 3); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'pastor') {
+    ctx.globalAlpha = .55; ctx.strokeStyle = '#2E7D32'; ctx.lineWidth = 1.4;
+    for (let i = 0; i < 35; i++) {
+      const x = (i * 41) % w, y = h * (.78 + (i % 6) * .03);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + Math.sin(t+i)*5, y - 12, x + 4, y - 20); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'apa') {
+    ctx.globalAlpha = .5;
+    for (let i = 0; i < 9; i++) {
+      const x = w * (.06 + i*.12), y = h * (.91 + (i%2)*.025);
+      ctx.fillStyle = i%2 ? '#78909C' : '#90A4AE'; ctx.beginPath(); ctx.ellipse(x, y, 13, 5, -.15, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.65)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x, y - 2, 9, 2, 0, 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'cetate') {
+    stoneTexture(ctx, 0, h*.58, w, h*.25, 17);
+    ctx.fillStyle = 'rgba(50,35,25,.32)';
+    for (let i = 0; i < 5; i++) ctx.fillRect(w*(.08+i*.21), h*.66, 10, 18);
+  } else if (sceneId === 'noapte') {
+    ctx.globalAlpha = .24; ctx.fillStyle = '#D7E9FF';
+    for (let i = 0; i < 3; i++) {
+      const x = w * (.18 + i*.29), y = h * (.34 + i*.06);
+      ctx.beginPath(); ctx.ellipse(x, y, w*.17, h*.025, -.18, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'munte') {
+    ctx.globalAlpha = .18; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 9; i++) {
+      const x = w * (.1 + i*.1);
+      ctx.beginPath(); ctx.moveTo(x, h*.78); ctx.lineTo(x + 24, h*.52 + (i%3)*18); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'rugaciune') {
+    ctx.globalAlpha = .45; ctx.fillStyle = '#FFF7B0';
+    for (let i = 0; i < 12; i++) {
+      const p = (t*.08 + i*.083) % 1;
+      ctx.beginPath(); ctx.arc(w*(.25 + (i%4)*.16), h*(.8 - p*.42), 1.4 + (i%3), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'fuga') {
+    ctx.globalAlpha = .26; ctx.strokeStyle = '#3E2723'; ctx.lineWidth = 1.2;
+    for (let i = 0; i < 8; i++) {
+      const x = w * (.03 + i*.14);
+      ctx.beginPath(); ctx.moveTo(x, h*.9); ctx.lineTo(x + 17, h*.82); ctx.lineTo(x + 30, h*.9); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'victorie') {
+    ctx.globalAlpha = .55;
+    for (let i = 0; i < 13; i++) {
+      const x = (w * (.08 + i*.077) + Math.sin(t+i)*8) % w;
+      const y = h * (.52 + ((t*.06+i*.11)%1)*.35);
+      ctx.fillStyle = i%2 ? '#FFD54F' : '#EF9A9A'; ctx.beginPath(); ctx.ellipse(x, y, 3, 6, .45, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else if (sceneId === 'pergament') {
+    ctx.globalAlpha = .15; ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 1;
+    for (let i = 0; i < 14; i++) {
+      const y = h * (.2 + i*.045);
+      ctx.beginPath(); ctx.moveTo(w*.24, y); ctx.quadraticCurveTo(w*.5, y + Math.sin(i)*3, w*.76, y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
 function flame(ctx, x, y, s, t, seed = 0) {
   const f = 1 + .18 * Math.sin(t * 9 + seed) + .1 * Math.sin(t * 23 + seed * 2);
   [[s,'#FF7043',.9],[s*.66,'#FFA726',.95],[s*.38,'#FFEE58',1]].forEach(([r,c,a]) => {
@@ -1008,6 +1107,7 @@ const SceneEngine = (() => {
     try {
       activeBackdrop = BACKDROPS.get(BACKDROP_FOR_SCENE[entry.scene.id]) || null;
       entry.scene.draw(ctx, w, h, now - entry.start, entry.state);
+      drawRefinedDetails(ctx, w, h, now - entry.start, entry.scene.id);
       sceneAtmosphere(ctx, w, h, now - entry.start);
     } catch(e) {}
     activeBackdrop = null;
