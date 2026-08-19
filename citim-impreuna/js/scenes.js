@@ -21,30 +21,38 @@ function star5(ctx, x, y, r, col, alpha) {
   ctx.closePath(); ctx.fill(); ctx.restore();
 }
 
-/* Soare zâmbitor cu raze (stil Talant) */
+/* Soare cald, cu lumina atmosferica si fara contur de personaj. */
 function smileSun(ctx, cx, cy, r, t) {
   ctx.save();
-  for (let i = 0; i < 12; i++) {
-    const a = i / 12 * Math.PI * 2 + t * 0.4;
-    const r1 = r * 1.25, r2 = r * 1.78 + Math.sin(t * 2 + i) * r * 0.07;
-    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = r * 0.1; ctx.lineCap = 'round';
+  const halo = ctx.createRadialGradient(cx, cy, r * .15, cx, cy, r * 4.5);
+  halo.addColorStop(0, 'rgba(255,248,190,.48)');
+  halo.addColorStop(.35, 'rgba(255,220,120,.18)');
+  halo.addColorStop(1, 'rgba(255,210,100,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - r * 4.5, cy - r * 4.5, r * 9, r * 9);
+  for (let i = 0; i < 18; i++) {
+    const a = i / 12 * Math.PI * 2 + t * 0.04;
+    const r1 = r * 1.35, r2 = r * 1.82 + Math.sin(t * 2 + i) * r * 0.04;
+    ctx.strokeStyle = 'rgba(255,211,96,.38)'; ctx.lineWidth = Math.max(1, r * 0.045); ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
     ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a)); ctx.stroke();
   }
-  ctx.fillStyle = '#FFE840'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.28)';
-  ctx.beginPath(); ctx.ellipse(cx - r * .22, cy - r * .25, r * .36, r * .2, -.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#7a4500';
-  [-.28, .28].forEach(dx => { ctx.beginPath(); ctx.arc(cx + dx * r, cy - r * .08, r * .09, 0, Math.PI * 2); ctx.fill(); });
-  ctx.strokeStyle = '#7a4500'; ctx.lineWidth = r * .09; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.arc(cx, cy + r * .12, r * .28, .15, Math.PI - .15); ctx.stroke();
+  const disk = ctx.createRadialGradient(cx - r * .28, cy - r * .32, r * .1, cx, cy, r);
+  disk.addColorStop(0, '#FFF8C8');
+  disk.addColorStop(.7, '#FFD66B');
+  disk.addColorStop(1, '#EFAE3A');
+  ctx.fillStyle = disk; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
-/* Nor pufos cu 6 cercuri (stil Talant) */
+/* Nor stratificat, cu margini neregulate si umbra discreta. */
 function fluffyCloud(ctx, cx, cy, cw, ch, col, alpha) {
-  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = col;
-  [[0,0,.55],[-.28,.12,.38],[.28,.12,.38],[-.48,.28,.28],[.48,.28,.28],[0,.32,.32]]
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.shadowColor = 'rgba(52,73,94,.14)'; ctx.shadowBlur = ch * .35; ctx.shadowOffsetY = ch * .16;
+  const cloud = ctx.createLinearGradient(0, cy - ch, 0, cy + ch);
+  cloud.addColorStop(0, col); cloud.addColorStop(1, 'rgba(210,220,226,.78)');
+  ctx.fillStyle = cloud;
+  [[0,0,.55],[-.28,.12,.38],[.28,.12,.38],[-.48,.28,.28],[.48,.28,.28],[-.08,.32,.38]]
     .forEach(([dx, dy, fr]) => {
       ctx.beginPath(); ctx.arc(cx + dx * cw, cy + dy * ch * 2, fr * ch * 2, 0, Math.PI * 2); ctx.fill();
     });
@@ -52,12 +60,26 @@ function fluffyCloud(ctx, cx, cy, cw, ch, col, alpha) {
 }
 
 function hillBand(ctx, w, h, baseY, amp, freq, phase, col) {
-  ctx.fillStyle = col; ctx.beginPath();
+  const g = ctx.createLinearGradient(0, baseY - amp * 2, 0, h);
+  g.addColorStop(0, col);
+  g.addColorStop(1, 'rgba(24,54,48,.38)');
+  ctx.fillStyle = g; ctx.beginPath();
   for (let x = 0; x <= w; x += 8) {
     const y = baseY + amp * Math.sin(x / w * Math.PI * freq + phase);
     x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+  ctx.save();
+  ctx.globalAlpha = .14;
+  ctx.strokeStyle = 'rgba(255,255,255,.9)';
+  ctx.lineWidth = Math.max(1, h * .003);
+  ctx.beginPath();
+  for (let x = 0; x <= w; x += 12) {
+    const y = baseY + amp * Math.sin(x / w * Math.PI * freq + phase) - h * .006;
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
 }
 
 function flame(ctx, x, y, s, t, seed = 0) {
@@ -142,20 +164,31 @@ function butterfly(ctx, cx, cy, sz, col, t, ph) {
   ctx.restore();
 }
 
-/* Copac rotund drăguț */
+/* Copac cu coroana pe mai multe niveluri, lumina si umbra. */
 function roundTree(ctx, x, by, sz, tc, lc) {
-  ctx.fillStyle = tc; ctx.fillRect(x - sz*.08, by - sz*.22, sz*.16, sz*.22);
-  ctx.fillStyle = lc; ctx.beginPath(); ctx.arc(x, by - sz*.52, sz*.45, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.2)';
-  ctx.beginPath(); ctx.ellipse(x - sz*.1, by - sz*.62, sz*.2, sz*.14, -.5, 0, Math.PI*2); ctx.fill();
+  const trunk = ctx.createLinearGradient(x - sz*.1, 0, x + sz*.1, 0);
+  trunk.addColorStop(0, '#4E342E'); trunk.addColorStop(.5, tc); trunk.addColorStop(1, '#3E2723');
+  ctx.fillStyle = trunk; ctx.fillRect(x - sz*.09, by - sz*.32, sz*.18, sz*.32);
+  const canopy = ctx.createRadialGradient(x - sz*.16, by - sz*.7, sz*.08, x, by - sz*.52, sz*.62);
+  canopy.addColorStop(0, 'rgba(255,255,255,.24)'); canopy.addColorStop(.3, lc); canopy.addColorStop(1, 'rgba(24,65,38,.78)');
+  ctx.fillStyle = canopy;
+  [[-.32,.62,.32],[.28,.6,.36],[-.05,.42,.46],[-.48,.42,.25],[.48,.42,.27]].forEach(([dx, dy, r]) => {
+    ctx.beginPath(); ctx.arc(x + dx * sz, by - dy * sz, r * sz, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.fillStyle = 'rgba(255,255,255,.12)';
+  ctx.beginPath(); ctx.ellipse(x - sz*.18, by - sz*.68, sz*.22, sz*.1, -.55, 0, Math.PI*2); ctx.fill();
 }
 
 /* Brad */
 function pineTree(ctx, x, by, sz) {
-  ctx.fillStyle = '#5D4037'; ctx.fillRect(x - sz*.06, by - sz*.2, sz*.12, sz*.2);
-  [[0,3,.7],[1,2,.55],[2,1,.4]].forEach(([i]) => {
-    const lw = sz*(.7 - i*.15), ly = by - sz*(.35 + i*.25);
-    ctx.fillStyle = i===0?'#2E7D32':i===1?'#388E3C':'#43A047';
+  const trunk = ctx.createLinearGradient(x - sz*.08, 0, x + sz*.08, 0);
+  trunk.addColorStop(0, '#4E342E'); trunk.addColorStop(.5, '#795548'); trunk.addColorStop(1, '#3E2723');
+  ctx.fillStyle = trunk; ctx.fillRect(x - sz*.07, by - sz*.24, sz*.14, sz*.24);
+  [[0,3,.78],[1,2,.64],[2,1,.5],[3,0,.34]].forEach(([i]) => {
+    const lw = sz*(.82 - i*.14), ly = by - sz*(.36 + i*.2);
+    const green = ctx.createLinearGradient(x, ly - sz*.36, x, ly + sz*.12);
+    green.addColorStop(0, i===0?'#1B5E20':i===1?'#2E7D32':'#388E3C');
+    green.addColorStop(1, '#163D27'); ctx.fillStyle = green;
     ctx.beginPath(); ctx.moveTo(x, by - sz*(.55+i*.25)); ctx.lineTo(x-lw/2,ly); ctx.lineTo(x+lw/2,ly); ctx.closePath(); ctx.fill();
   });
 }
