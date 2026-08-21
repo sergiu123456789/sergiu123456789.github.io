@@ -1,4 +1,4 @@
-const CACHE = "citim-impreuna-v65";
+const CACHE = "citim-impreuna-v61";
 const ASSETS = [
   ".",
   "index.html",
@@ -6,11 +6,6 @@ const ASSETS = [
   "js/app.js",
   "js/config.js",
   "js/scenes.js",
-  "media/scenes/temple-realistic.webp",
-  "media/scenes/desert-realistic.webp",
-  "media/scenes/valley-realistic.webp",
-  "media/scenes/city-realistic.webp",
-  "media/scenes/night-realistic.webp",
   "js/tracker.js",
   "js/verses-1samuel.js",
   "js/verses-2samuel.js",
@@ -50,5 +45,15 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const existing = windows.find((client) => client.url.startsWith(self.location.origin));
+      return existing ? existing.focus() : clients.openWindow("./");
+    })
   );
 });
