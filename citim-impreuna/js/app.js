@@ -103,6 +103,29 @@ function reminderIsEnabled() {
   return localStorage.getItem(STORAGE_REMINDER_ENABLED) === "true";
 }
 
+// Periodic background sync cannot read localStorage. Mirror only the reminder
+// preference into a tiny IndexedDB store so a supporting browser can deliver
+// the notification even when the page is closed; the in-page timer remains the
+// precise-time fallback for browsers without periodicSync.
+function persistReminderSettingsForWorker(enabled, time) {
+  if (!("indexedDB" in window)) return;
+  try {
+    const request = indexedDB.open("citim-impreuna-settings", 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("settings");
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction("settings", "readwrite");
+      tx.objectStore("settings").put({ enabled, time }, "daily-reminder");
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => db.close();
+    };
+  } catch {
+    // IndexedDB is an enhancement; localStorage/timer still work.
+  }
+}
+
 function dateKey(date = new Date()) {
   const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return offsetDate.toISOString().slice(0, 10);
@@ -197,6 +220,7 @@ async function saveReminder() {
   }
   localStorage.setItem(STORAGE_REMINDER_ENABLED, String(enabled));
   localStorage.setItem(STORAGE_REMINDER_TIME, time);
+  persistReminderSettingsForWorker(enabled, time);
   updateReminderButton();
   scheduleDailyReminder();
   closeReminderModal();
@@ -873,11 +897,11 @@ async function renderStats() {
     // Clasamentul vine din tabelul agregat `scores` (un rând/utilizator),
     // iar panoul personal doar din evenimentele utilizatorului curent — nu
     // se mai descarcă tot istoricul la fiecare deschidere.
-    const [scores, myEvents, config] = await Promise.all([
-      Tracker.fetchScores(),
+    const [myEvents, config] = await Promise.all([
       Tracker.fetchUserEvents(userName),
       Tracker.fetchConfig(),
     ]);
+    const scores = await Tracker.fetchScores(config.leaderboard_size);
     if (scores.length === 0) {
       wrap.innerHTML = "<p>Clasamentul nu este disponibil momentan. Încearcă din nou mai târziu.</p>";
       return;
@@ -1003,7 +1027,8 @@ function renderStatsFromScores(wrap, scores, myEvents, leaderboardSize) {
   const board = document.createElement("div");
   board.className = "leaderboard";
   board.innerHTML = "<h3>🏆 Clasament</h3>";
-  ranking.filter((entry) => entry.points > 0).forEach((entry, i) => {
+  const maxEntries = Math.max(1, Math.min(Number.parseInt(leaderboardSize, 10) || 5, 1000));
+  ranking.filter((entry) => entry.points > 0).slice(0, maxEntries).forEach((entry, i) => {
     const row = document.createElement("div");
     // Rândul propriu se identifică după user_id când e disponibil (precis,
     // distinge conturi cu același nume); dacă RPC-ul e neactualizat și nu
@@ -1325,6 +1350,7 @@ el.authModal?.addEventListener("click", (e) => { if (e.target === el.authModal) 
 el.score.textContent = score;
 updateReminderButton();
 scheduleDailyReminder();
+persistReminderSettingsForWorker(reminderIsEnabled(), reminderTime());
 if (page >= totalPages) page = 0;
 renderPage();
 Tracker.flush();
@@ -1372,6 +1398,9 @@ if ("serviceWorker" in navigator) {
     .then((reg) => {
       serviceWorkerRegistration = reg;
       reg.update();
+      if (reg.periodicSync) {
+        reg.periodicSync.register("citim-daily-reminder", { minInterval: 24 * 60 * 60 * 1000 }).catch(() => {});
+      }
       // verifică periodic dacă a apărut o versiune nouă (aplicația poate sta
       // deschisă zile întregi ca PWA instalat)
       setInterval(() => reg.update(), 30 * 60 * 1000);
