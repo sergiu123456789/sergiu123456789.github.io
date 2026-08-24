@@ -897,16 +897,13 @@ async function renderStats() {
     // Clasamentul vine din tabelul agregat `scores` (un rând/utilizator),
     // iar panoul personal doar din evenimentele utilizatorului curent — nu
     // se mai descarcă tot istoricul la fiecare deschidere.
-    const [myEvents, config] = await Promise.all([
-      Tracker.fetchUserEvents(userName),
-      Tracker.fetchConfig(),
-    ]);
-    const scores = await Tracker.fetchScores(config.leaderboard_size);
+    const myEvents = await Tracker.fetchUserEvents(userName);
+    const scores = await Tracker.fetchScores();
     if (scores.length === 0) {
       wrap.innerHTML = "<p>Clasamentul nu este disponibil momentan. Încearcă din nou mai târziu.</p>";
       return;
     }
-    renderStatsFromScores(wrap, scores, myEvents, config.leaderboard_size);
+    renderStatsFromScores(wrap, scores, myEvents);
   } catch {
     wrap.innerHTML = "<p>Statisticile au nevoie de internet. Încearcă din nou mai târziu.</p>";
   }
@@ -1012,7 +1009,7 @@ function renderStatsContent(wrap, events, leaderboardSize) {
 
 // Clasament din tabelul agregat `scores` (un rând/utilizator) + panoul personal
 // din evenimentele proprii. Calea implicită; renderStatsContent rămâne fallback.
-function renderStatsFromScores(wrap, scores, myEvents, leaderboardSize) {
+function renderStatsFromScores(wrap, scores, myEvents) {
   // Fiecare rând din `scores` e deja unic per user_id (upsert în
   // recalculate_score_for_user) — nu se mai fuzionează după nume normalizat,
   // ca să nu se amestece conturi diferite care întâmplător au același nume
@@ -1027,8 +1024,7 @@ function renderStatsFromScores(wrap, scores, myEvents, leaderboardSize) {
   const board = document.createElement("div");
   board.className = "leaderboard";
   board.innerHTML = "<h3>🏆 Clasament</h3>";
-  const maxEntries = Math.max(1, Math.min(Number.parseInt(leaderboardSize, 10) || 5, 1000));
-  ranking.filter((entry) => entry.points > 0).slice(0, maxEntries).forEach((entry, i) => {
+  ranking.filter((entry) => entry.points > 0).forEach((entry, i) => {
     const row = document.createElement("div");
     // Rândul propriu se identifică după user_id când e disponibil (precis,
     // distinge conturi cu același nume); dacă RPC-ul e neactualizat și nu

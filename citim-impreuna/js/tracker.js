@@ -255,26 +255,24 @@ const Tracker = (() => {
   // Clasamentul agregat: un singur rând per utilizator (user_name, points),
   // derivat de Supabase din evenimente. Evită descărcarea întregului istoric
   // la fiecare deschidere de statistici.
-  function leaderboardLimit(value) {
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed)
-      ? Math.max(1, Math.min(parsed, 1000))
-      : DEFAULT_LEADERBOARD_SIZE;
-  }
+  const LEADERBOARD_PAGE_SIZE = 1000;
 
-  async function fetchScores(limit = DEFAULT_LEADERBOARD_SIZE) {
+  async function fetchScores() {
     if (!enabled) return [];
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/rpc/get_public_leaderboard`,
-        {
+      const all = [];
+      for (let offset = 0; offset < 100000; offset += LEADERBOARD_PAGE_SIZE) {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_public_leaderboard`, {
           method: "POST",
           headers: await authHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ p_limit: leaderboardLimit(limit) }),
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+          body: JSON.stringify({ p_limit: LEADERBOARD_PAGE_SIZE, p_offset: offset }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const rows = await res.json();
+        all.push(...rows);
+        if (rows.length < LEADERBOARD_PAGE_SIZE) break;
+      }
+      return all;
     } catch {
       // tabel lipsă/offline — apelantul recurge la calculul din evenimente
       return [];
